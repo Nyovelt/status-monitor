@@ -1,0 +1,98 @@
+# Caddyfile for Status Monitor with Host-based Caddy
+# Domain: swat-status.aaaab3n.moe
+# Caddy running on host, Docker containers on custom ports
+#
+# To use this configuration:
+# 1. Copy this file to your Caddy config directory (usually /etc/caddy/Caddyfile)
+# 2. Reload Caddy: sudo systemctl reload caddy
+#    OR: sudo caddy reload --config /etc/caddy/Caddyfile
+
+# Single domain setup - Frontend on main domain, API on /api path
+swat-status.aaaab3n.moe {
+    # Frontend - Next.js on port 32023
+    reverse_proxy localhost:32023
+
+    # API endpoints - Rust backend on port 32022
+    handle_path /api/* {
+        reverse_proxy localhost:32022
+    }
+
+    # WebSocket endpoint for live updates
+    @websockets {
+        path /ws/*
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+    reverse_proxy @websockets localhost:32022
+
+    # Enable compression
+    encode gzip zstd
+
+    # Security headers
+    header {
+        # Enable HSTS
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        # Prevent clickjacking
+        X-Frame-Options "SAMEORIGIN"
+        # Prevent MIME sniffing
+        X-Content-Type-Options "nosniff"
+        # Enable XSS protection
+        X-XSS-Protection "1; mode=block"
+        # Remove server header
+        -Server
+    }
+
+    # Logging
+    log {
+        output file /var/log/caddy/swat-status-access.log {
+            roll_size 100mb
+            roll_keep 10
+            roll_keep_for 720h
+        }
+        format json
+    }
+}
+
+# Alternative: Separate subdomain for API
+# Uncomment if you want api.swat-status.aaaab3n.moe instead of path-based routing
+#
+# swat-status.aaaab3n.moe {
+#     reverse_proxy localhost:32023
+#
+#     encode gzip zstd
+#
+#     header {
+#         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+#         X-Frame-Options "SAMEORIGIN"
+#         X-Content-Type-Options "nosniff"
+#         X-XSS-Protection "1; mode=block"
+#         -Server
+#     }
+#
+#     log {
+#         output file /var/log/caddy/swat-status-web.log
+#         format json
+#     }
+# }
+#
+# api.swat-status.aaaab3n.moe {
+#     reverse_proxy localhost:32022
+#
+#     @websockets {
+#         header Connection *Upgrade*
+#         header Upgrade websocket
+#     }
+#     reverse_proxy @websockets localhost:32022
+#
+#     encode gzip zstd
+#
+#     header {
+#         -Server
+#         X-Content-Type-Options "nosniff"
+#     }
+#
+#     log {
+#         output file /var/log/caddy/swat-status-api.log
+#         format json
+#     }
+# }

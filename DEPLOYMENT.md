@@ -183,3 +183,263 @@ curl http://localhost:8080/api/clients
 ```
 
 Docker health checks are configured in the docker-compose file and will automatically restart the container if it becomes unhealthy.
+
+---
+
+## Deploying with Caddy and Cloudflare
+
+For production deployments with automatic HTTPS and Cloudflare integration, use Caddy as a reverse proxy.
+
+### Architecture
+
+```
+Internet → Cloudflare → Caddy (HTTPS) → Docker Containers
+                                        ├─ Server (8080)
+                                        └─ Web (3000)
+```
+
+### Prerequisites
+
+1. **Domain name** managed by Cloudflare
+2. **Server** with Docker and Docker Compose installed
+3. **Cloudflare account** with your domain added
+
+### Step 1: Configure Cloudflare DNS
+
+1. **Log in to Cloudflare Dashboard**
+
+2. **Add DNS Records**:
+
+   **Option A: Separate Subdomains (Recommended)**
+   - `status.yourdomain.com` → Your server IP (A record)
+   - `api.status.yourdomain.com` → Your server IP (A record)
+
+   **Option B: Single Domain**
+   - `status.yourdomain.com` → Your server IP (A record)
+
+3. **SSL/TLS Settings**:
+   - Go to SSL/TLS → Overview
+   - Set encryption mode to **"Full"** or **"Full (strict)"**
+   - This ensures end-to-end encryption between Cloudflare and your server
+
+4. **Proxy Settings**:
+   - **Orange cloud icon (Proxied)**: Traffic goes through Cloudflare (DDoS protection, caching)
+   - **Gray cloud icon (DNS only)**: Direct to your server (faster, but no Cloudflare protection)
+   - Recommended: **Proxied** for production
+
+### Step 2: Configure Caddy
+
+1. **Edit the Caddyfile**:
+
+   ```bash
+   nano Caddyfile
+   ```
+
+2. **Replace `example.com` with your domain**:
+
+   For separate subdomains:
+   ```caddyfile
+   status.yourdomain.com {
+       reverse_proxy web:3000
+       # ... rest of config
+   }
+
+   api.status.yourdomain.com {
+       reverse_proxy server:8080
+       # ... rest of config
+   }
+   ```
+
+   For single domain, uncomment "Option 2" in the Caddyfile.
+
+### Step 3: Update Docker Compose Configuration
+
+1. **Edit `docker-compose.caddy.yml`**:
+
+   ```bash
+   nano docker-compose.caddy.yml
+   ```
+
+2. **Update environment variables** in the `web` service:
+
+   For separate subdomains:
+   ```yaml
+   environment:
+     - NEXT_PUBLIC_API_URL=https://api.status.yourdomain.com
+     - NEXT_PUBLIC_WS_URL=wss://api.status.yourdomain.com/ws/live
+   ```
+
+   For single domain:
+   ```yaml
+   environment:
+     - NEXT_PUBLIC_API_URL=https://status.yourdomain.com/api
+     - NEXT_PUBLIC_WS_URL=wss://status.yourdomain.com/ws/live
+   ```
+
+### Step 4: Deploy
+
+1. **Start the stack**:
+
+   ```bash
+   docker-compose -f docker-compose.caddy.yml up -d
+   ```
+
+2. **Check logs**:
+
+   ```bash
+   # Check all services
+   docker-compose -f docker-compose.caddy.yml logs -f
+
+   # Check Caddy specifically
+   docker-compose -f docker-compose.caddy.yml logs -f caddy
+   ```
+
+3. **Verify HTTPS certificates**:
+
+   Caddy automatically obtains and renews Let's Encrypt certificates. Check the logs for:
+   ```
+   certificate obtained successfully
+   ```
+
+### Step 5: Access Your Application
+
+- **Frontend**: `https://status.yourdomain.com`
+- **Backend API**: `https://api.status.yourdomain.com` (or `/api` path)
+
+### Cloudflare Configuration Tips
+
+#### 1. **Enable HTTP/3** (Recommended)
+   - Go to Network settings
+   - Enable HTTP/3 (QUIC)
+   - Caddy already supports HTTP/3 on port 443/udp
+
+#### 2. **Configure Firewall Rules** (Optional)
+   - Create rules to block malicious traffic
+   - Example: Block common attack patterns
+
+#### 3. **Enable Caching** (Optional)
+   - Go to Caching → Configuration
+   - Create page rules to cache static assets
+   - Don't cache API endpoints
+
+#### 4. **Configure SSL/TLS Settings**
+   - Minimum TLS Version: TLS 1.2
+   - Enable Always Use HTTPS
+   - Enable Automatic HTTPS Rewrites
+
+#### 5. **WebSocket Support**
+   - Cloudflare automatically proxies WebSocket connections
+   - No additional configuration needed
+   - Ensure SSL/TLS mode is "Full" or "Full (strict)"
+
+### Security Best Practices
+
+1. **Restrict Port Access**:
+   ```bash
+   # Only allow ports 80, 443 from outside
+   # Block direct access to 3000, 8080
+   ufw allow 80/tcp
+   ufw allow 443/tcp
+   ufw enable
+   ```
+
+2. **Enable Cloudflare Firewall**:
+   - Use Cloudflare's Web Application Firewall (WAF)
+   - Enable Bot Fight Mode
+   - Configure rate limiting
+
+3. **Secure Headers**:
+   - Already configured in Caddyfile (HSTS, X-Frame-Options, etc.)
+
+4. **Regular Updates**:
+   ```bash
+   # Update images
+   docker-compose -f docker-compose.caddy.yml pull
+   docker-compose -f docker-compose.caddy.yml up -d
+   ```
+
+### Advanced: Cloudflare API Token for DNS Challenge
+
+If you want to use Cloudflare's DNS-01 challenge for certificates (optional):
+
+1. **Create Cloudflare API Token**:
+   - Go to Cloudflare Dashboard → My Profile → API Tokens
+   - Create Token → Edit zone DNS template
+   - Permissions: Zone → DNS → Edit
+   - Zone Resources: Include → Specific zone → your domain
+
+2. **Add to docker-compose.caddy.yml**:
+   ```yaml
+   caddy:
+     environment:
+       - CLOUDFLARE_API_TOKEN=your_token_here
+   ```
+
+3. **Update Caddyfile** to use DNS challenge:
+   ```caddyfile
+   status.yourdomain.com {
+       tls {
+           dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+       }
+       # ... rest of config
+   }
+   ```
+
+### Troubleshooting Caddy + Cloudflare
+
+#### HTTPS Certificate Issues
+
+**Problem**: Certificate errors or "too many redirects"
+**Solution**:
+- Ensure Cloudflare SSL/TLS mode is "Full" or "Full (strict)", not "Flexible"
+- Check Caddy logs: `docker logs status-monitor-caddy`
+- Verify DNS records are correct and propagated
+
+#### WebSocket Connection Fails
+
+**Problem**: Live updates not working (WebSocket connection fails)
+**Solution**:
+- Verify WebSocket URL uses `wss://` (secure WebSocket)
+- Check Cloudflare is proxying WebSocket connections (should be automatic)
+- Ensure Caddyfile has WebSocket handling configuration
+- Check browser console for connection errors
+
+#### 502 Bad Gateway
+
+**Problem**: Caddy shows 502 error
+**Solution**:
+- Check if backend containers are running: `docker ps`
+- Verify container names match in Caddyfile (`web:3000`, `server:8080`)
+- Check backend health: `docker-compose -f docker-compose.caddy.yml exec server curl http://localhost:8080/api/clients`
+- Review logs: `docker-compose -f docker-compose.caddy.yml logs`
+
+#### Cloudflare Shows Origin Unreachable
+
+**Problem**: Cloudflare can't reach your server
+**Solution**:
+- Verify server IP is correct in DNS records
+- Check server firewall allows ports 80 and 443
+- Ensure Caddy is running and bound to correct ports
+- Test direct connection: `curl -I http://YOUR_SERVER_IP`
+
+### Monitoring and Logs
+
+**View Caddy access logs**:
+```bash
+docker-compose -f docker-compose.caddy.yml exec caddy tail -f /var/log/caddy/status-access.log
+docker-compose -f docker-compose.caddy.yml exec caddy tail -f /var/log/caddy/api-access.log
+```
+
+**View application logs**:
+```bash
+# Server logs
+docker logs status-monitor-server -f
+
+# Web logs
+docker logs status-monitor-web -f
+```
+
+**Check Cloudflare Analytics**:
+- Go to Analytics & Logs in Cloudflare Dashboard
+- Monitor traffic, threats blocked, and performance
+

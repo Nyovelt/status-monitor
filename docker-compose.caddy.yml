@@ -1,0 +1,89 @@
+version: '3.8'
+
+# Docker Compose configuration with Caddy reverse proxy
+# For production deployment with automatic HTTPS and Cloudflare integration
+#
+# Usage:
+#   1. Update domains in Caddyfile (replace example.com)
+#   2. Set DOMAIN and API_DOMAIN environment variables below
+#   3. Configure Cloudflare DNS to point to your server
+#   4. Run: docker-compose -f docker-compose.caddy.yml up -d
+
+services:
+  # Caddy Reverse Proxy
+  caddy:
+    image: caddy:2-alpine
+    container_name: status-monitor-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - caddy_logs:/var/log/caddy
+    environment:
+      # Cloudflare API token (optional, for DNS-01 challenge)
+      # Set in .env file or uncomment below
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
+      - ACME_AGREE=true
+    networks:
+      - status-monitor
+    depends_on:
+      - server
+      - web
+
+  # Rust Backend Server
+  server:
+    image: ${SERVER_IMAGE:-ghcr.io/nyovelt/status-monitor-server:latest}
+    container_name: status-monitor-server
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-sqlite:/app/data/monitor.db}
+      - RUST_LOG=${RUST_LOG:-server=info,tower_http=info}
+    volumes:
+      - ./data:/app/data
+    networks:
+      - status-monitor
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/clients"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    # Don't expose ports externally - only accessible via Caddy
+    expose:
+      - "8080"
+
+  # Next.js Frontend
+  web:
+    image: ${WEB_IMAGE:-ghcr.io/nyovelt/status-monitor-web:latest}
+    container_name: status-monitor-web
+    restart: unless-stopped
+    environment:
+      # These are read from .env file
+      # Run ./setup-caddy.sh to generate .env or create it manually
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://api.status.example.com}
+      - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-wss://api.status.example.com/ws/live}
+    networks:
+      - status-monitor
+    depends_on:
+      - server
+    # Don't expose ports externally - only accessible via Caddy
+    expose:
+      - "3000"
+
+networks:
+  status-monitor:
+    driver: bridge
+
+volumes:
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
+  caddy_logs:
+    driver: local
+  data:
+    driver: local
