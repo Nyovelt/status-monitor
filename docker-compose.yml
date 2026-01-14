@@ -5,7 +5,7 @@ services:
   server:
     image: ghcr.io/nyovelt/status-monitor-server:latest
     ports:
-      - "8080:8080"
+      - "127.0.0.1:32022:8080"  # Bind to localhost:32022 for Caddy proxy
     environment:
       - DATABASE_URL=sqlite:/app/data/monitor.db
       - RUST_LOG=server=info,tower_http=info
@@ -22,10 +22,10 @@ services:
   web:
     image: ghcr.io/nyovelt/status-monitor-web:latest
     ports:
-      - "3000:3000"
+      - "127.0.0.1:32023:3000"  # Bind to localhost:32023 for Caddy proxy
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
-      - NEXT_PUBLIC_WS_URL=ws://localhost:8080/ws/live
+      - NEXT_PUBLIC_API_URL=https://swat-status.aaaab3n.moe/api
+      - NEXT_PUBLIC_WS_URL=wss://swat-status.aaaab3n.moe/ws/live
     depends_on:
       - server
     restart: unless-stopped
