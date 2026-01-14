@@ -1,11 +1,10 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { getClients } from '@/lib/api';
 import { ClientCard } from '@/components/client-card';
-import { useMetricsWebSocket } from '@/hooks/useMetricsWebSocket';
-import { cn } from '@/lib/utils';
+import { useMetricsPolling } from '@/hooks/useMetricsPolling';
 
 export default function Dashboard() {
   const { data: clients, isLoading, error, refetch } = useQuery({
@@ -13,7 +12,7 @@ export default function Dashboard() {
     queryFn: getClients,
   });
 
-  const { getLatestMetric, getRecentMetrics, isConnected, connectionStatus } = useMetricsWebSocket();
+  const { getLatestMetric, getRecentMetrics, isFetching } = useMetricsPolling(clients);
 
   if (isLoading) {
     return (
@@ -48,24 +47,12 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-4">
-          <div className={cn(
-            'flex items-center gap-2 px-3 py-1.5 rounded-full text-sm',
-            isConnected ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'
-          )}>
-            {isConnected ? (
-              <Wifi className="w-4 h-4" />
-            ) : (
-              <WifiOff className="w-4 h-4" />
-            )}
-            {connectionStatus}
-          </div>
-
           <button
             onClick={() => refetch()}
             className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
             title="Refresh"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>

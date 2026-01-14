@@ -46,15 +46,6 @@ pub async fn report_metrics(
         client.id
     );
 
-    // Broadcast to WebSocket clients
-    for metric in &inserted {
-        let msg = serde_json::json!({
-            "event": "metric",
-            "data": metric
-        });
-        let _ = state.ws_broadcast.send(msg.to_string());
-    }
-
     // Check alert rules
     if let Some(latest) = inserted.last() {
         check_alerts(&state, &client.id, latest).await;

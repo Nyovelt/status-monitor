@@ -117,9 +117,3 @@ pub struct CreateClientResponse {
     pub hostname: String,
     pub token: String,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WebSocketMessage {
-    pub event: String,
-    pub data: serde_json::Value,
-}

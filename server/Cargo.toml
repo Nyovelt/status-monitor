@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 # Web framework
-axum = { version = "0.7", features = ["ws"] }
+axum = "0.7"
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 
@@ -34,6 +34,3 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Environment
 dotenvy = "0.15"
-
-# Async utilities
-futures = "0.3"

@@ -2,7 +2,6 @@ mod db;
 mod models;
 mod routes;
 mod services;
-mod ws;
 
 use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Instant};
 
@@ -10,7 +9,7 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
-use tokio::sync::{broadcast, mpsc, Mutex};
+use tokio::sync::{mpsc, Mutex};
 use tower_http::{
     cors::{Any, CorsLayer},
     trace::TraceLayer,
@@ -25,7 +24,6 @@ pub type DbPool = db::DbPool;
 #[derive(Clone)]
 pub struct AppState {
     pub db: DbPool,
-    pub ws_broadcast: broadcast::Sender<String>,
     pub alert_tx: mpsc::Sender<(String, AlertRule, f64)>,
     pub alert_debounce: Arc<Mutex<HashMap<String, Instant>>>,
 }
@@ -50,16 +48,12 @@ async fn main() -> anyhow::Result<()> {
     let pool = db::init_db(&database_url).await?;
     info!("Database initialized at {}", database_url);
 
-    // Create broadcast channel for WebSocket
-    let (ws_tx, _) = broadcast::channel::<String>(1000);
-
     // Create alert channel
     let (alert_tx, alert_rx) = mpsc::channel::<(String, AlertRule, f64)>(100);
 
     // Create app state
     let state = AppState {
         db: pool.clone(),
-        ws_broadcast: ws_tx,
         alert_tx,
         alert_debounce: Arc::new(Mutex::new(HashMap::new())),
     };
@@ -86,8 +80,6 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/alerts", get(routes::settings::get_alert_rules))
         .route("/api/alerts", post(routes::settings::create_alert_rule))
         .route("/api/alerts/{id}", delete(routes::settings::delete_alert_rule))
-        // WebSocket
-        .route("/ws/live", get(ws::ws_handler))
         // Middleware
         .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
         .layer(TraceLayer::new_for_http())

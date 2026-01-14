@@ -34,8 +34,3 @@ export interface AlertRule {
   threshold: number;
   duration_sec: number;
 }
-
-export interface WebSocketMessage {
-  event: string;
-  data: Metric;
-}

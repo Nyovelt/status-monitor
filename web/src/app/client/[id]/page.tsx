@@ -5,8 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
-import { getClient, getMetrics, getStats } from '@/lib/api';
-import { useMetricsWebSocket } from '@/hooks/useMetricsWebSocket';
+import { getClient, getMetrics, getStats, getLatestMetrics } from '@/lib/api';
 import { MetricGauge } from '@/components/metric-gauge';
 import { HistoryChart } from '@/components/history-chart';
 import { StatsTable } from '@/components/stats-table';
@@ -39,8 +38,14 @@ export default function ClientDetailPage() {
     enabled: activeTab === 'stats',
   });
 
-  const { getLatestMetric } = useMetricsWebSocket();
-  const latestMetric = getLatestMetric(clientId);
+  const { data: liveMetrics, isLoading: liveLoading } = useQuery({
+    queryKey: ['latestMetrics', clientId],
+    queryFn: () => getLatestMetrics(clientId),
+    refetchInterval: 5000,
+    enabled: activeTab === 'live',
+  });
+
+  const latestMetric = liveMetrics?.length ? liveMetrics[liveMetrics.length - 1] : undefined;
 
   if (clientLoading) {
     return (
@@ -111,7 +116,11 @@ export default function ClientDetailPage() {
       {/* Live Tab */}
       {activeTab === 'live' && (
         <div className="bg-gray-800 rounded-lg p-6">
-          {latestMetric ? (
+          {liveLoading ? (
+            <div className="flex items-center justify-center h-40">
+              <RefreshCw className="w-8 h-8 animate-spin text-gray-500" />
+            </div>
+          ) : latestMetric ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-8 justify-items-center">
               <MetricGauge label="CPU Usage" value={latestMetric.cpu_usage} />
               <MetricGauge label="RAM Usage" value={latestMetric.ram_usage} />
@@ -123,7 +132,7 @@ export default function ClientDetailPage() {
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500">
-              Waiting for live metrics...
+              No metrics available
             </div>
           )}
 
