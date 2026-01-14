@@ -1,0 +1,46 @@
+version: '3.8'
+
+# Production docker-compose file for deploying with pre-built images from GitHub Container Registry
+# Perfect for use with Portainer or other container orchestration tools
+#
+# Usage:
+#   1. Replace 'YOUR_GITHUB_USERNAME' with your actual GitHub username/organization
+#   2. Update environment variables as needed
+#   3. Deploy with: docker-compose -f docker-compose.production.yml up -d
+#
+# Note: Make sure the GitHub Container Registry images are public, or you're logged in:
+#   docker login ghcr.io -u YOUR_GITHUB_USERNAME
+
+services:
+  # Rust Backend Server
+  server:
+    image: ghcr.io/YOUR_GITHUB_USERNAME/status-monitor-server:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=sqlite:/app/data/monitor.db
+      - RUST_LOG=server=info,tower_http=info
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/clients"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Next.js Frontend
+  web:
+    image: ghcr.io/YOUR_GITHUB_USERNAME/status-monitor-web:latest
+    ports:
+      - "3000:3000"
+    environment:
+      # Update these URLs based on your deployment setup
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NEXT_PUBLIC_WS_URL=ws://localhost:8080/ws/live
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  data:
