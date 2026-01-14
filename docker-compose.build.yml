@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # Rust Backend Server
   server:
-    image: ghcr.io/nyovelt/status-monitor-server:latest
+    build: ./server
     ports:
       - "8080:8080"
     environment:
@@ -20,7 +20,11 @@ services:
 
   # Next.js Frontend
   web:
-    image: ghcr.io/nyovelt/status-monitor-web:latest
+    build:
+      context: ./web
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8080
+        - NEXT_PUBLIC_WS_URL=ws://localhost:8080/ws/live
     ports:
       - "3000:3000"
     environment:
