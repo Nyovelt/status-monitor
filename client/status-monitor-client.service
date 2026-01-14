@@ -1,0 +1,22 @@
+[Unit]
+Description=Status Monitor Client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/status-monitor-client
+Restart=always
+RestartSec=10
+Environment=RUST_LOG=status_monitor_client=info
+EnvironmentFile=-/etc/status-monitor-client.env
+
+# Security hardening
+NoNewPrivileges=false
+ProtectSystem=strict
+ProtectHome=read-only
+ReadOnlyPaths=/
+ReadWritePaths=/tmp /var/lib/docker
+
+[Install]
+WantedBy=multi-user.target
