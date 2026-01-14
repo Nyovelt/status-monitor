@@ -1,10 +1,10 @@
 # Build stage
-FROM rust:1.83-bookworm AS builder
+FROM rust:bookworm AS builder
 
 WORKDIR /app
 
 # Copy manifests
-COPY Cargo.toml Cargo.lock* ./
+COPY Cargo.toml Cargo.lock ./
 
 # Create dummy source to cache dependencies
 RUN mkdir src && echo "fn main() {}" > src/main.rs
